@@ -1,6 +1,5 @@
 import Logging
 import ServiceLifecycle
-import SystemPackage
 import _NIOFileSystem
 
 struct Watcher: Service {
@@ -16,7 +15,7 @@ struct Watcher: Service {
       do {
         isDownloading = try await FileSystem.shared.withDirectoryHandle(atPath: self.directory) {
           try await $0.listContents().contains {
-            $0.name.extension?.hasSuffix(self.suffix) ?? false
+            $0.name.string.hasSuffix(self.suffix)
           }
         }
       } catch is CancellationError {
