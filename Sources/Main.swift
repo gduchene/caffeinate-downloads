@@ -6,6 +6,8 @@ import SystemPackage
 
 @main
 struct EntryPoint: AsyncParsableCommand {
+  static let configuration = CommandConfiguration(commandName: ProcessInfo.processInfo.processName)
+
   @Option(help: "Directory to search for ongoing downloads.", transform: { FilePath($0) })
   var directory = FilePath("\(NSHomeDirectory())/Downloads")
 
