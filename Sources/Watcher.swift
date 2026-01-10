@@ -7,49 +7,29 @@ struct Watcher: Service {
   let logger: Logger
   let suffix: String
 
-  func run() async {
-    let sleepInhibitor = SleepInhibitor()
+  func foundDownloads() async throws -> Bool {
+    try await FileSystem.shared.withDirectoryHandle(atPath: self.directory) {
+      try await $0.listContents().contains {
+        $0.name.string.hasSuffix(self.suffix)
+      }
+    }
+  }
 
+  func run() async throws {
     while !Task.isCancelled {
-      let isDownloading: Bool
       do {
-        isDownloading = try await FileSystem.shared.withDirectoryHandle(atPath: self.directory) {
-          try await $0.listContents().contains {
-            $0.name.string.hasSuffix(self.suffix)
-          }
+        while try await !foundDownloads() {
+          try await Task.sleep(for: .seconds(30))
+        }
+
+        try await withSleepInhibited {
+            self.logger.debug("Ongoing downloads found, inhibiting sleep")
+            while try await foundDownloads() {
+                try await Task.sleep(for: .seconds(30))
+            }
+            self.logger.debug("No ongoing downloads found, allowing sleep")
         }
       } catch is CancellationError {
-        return
-      } catch {
-        self.logger.error("Failed to check directory: \(error)")
-        return
-      }
-
-      switch (isDownloading, await sleepInhibitor.isInhibitingSleep) {
-      case (true, false):
-        self.logger.debug("Ongoing downloads found, inhibiting sleep")
-        do {
-          try await sleepInhibitor.create(
-            name: "caffeinate-downloads",
-            details: "There are files being downloaded"
-          )
-        } catch {
-          self.logger.error("Failed to create assertion: \(error)")
-        }
-
-      case (false, true):
-        self.logger.debug("No ongoing downloads found, allowing sleep")
-        do {
-          try await sleepInhibitor.release()
-        } catch {
-          self.logger.error("Failed to release assertion: \(error)")
-        }
-
-      default:
-        break
-      }
-
-      guard (try? await Task.sleep(for: .seconds(30))) != nil else {
         return
       }
     }
